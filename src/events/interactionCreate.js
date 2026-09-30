@@ -1,69 +1,65 @@
 import { logger } from '../utils/logger.js';
-import { formatUserErrorMessage } from '../utils/errors.js';
 
-export const name = 'interactionCreate';
-export const once = false;
+export default {
+  name: 'interactionCreate',
 
-/**
- * Handles incoming interactions (Slash Commands, Buttons, Select Menus, Modals).
- * @param {import('discord.js').BaseInteraction} interaction
- */
-export async function execute(interaction) {
-  // Handle Slash Commands (ChatInputCommand)
-  if (interaction.isChatInputCommand()) {
+  async execute(interaction) {
+    if (!interaction.isChatInputCommand()) {
+      return;
+    }
+
     const command = interaction.client.commands.get(interaction.commandName);
 
     if (!command) {
-      logger.warn(`Received unknown slash command: /${interaction.commandName}`);
+      logger.warn(`No handler found for /${interaction.commandName}`);
+
       await interaction.reply({
-        content: `❌ Unknown command: \`/${interaction.commandName}\`. It may have been deprecated or moved.`,
-        ephemeral: true,
+        content: `❌ I couldn't find the handler for \`/${interaction.commandName}\`.`,
+        flags: 64,
+      }).catch((error) => {
+        logger.error('Failed to respond to unknown command:', error);
       });
+
       return;
     }
 
     try {
-      logger.debug(
-        `Executing command /${interaction.commandName} by ${interaction.user.tag} in guild ${interaction.guildId || 'DM'}`
+      logger.info(
+        `Executing /${interaction.commandName} for user ${interaction.user.id}`
       );
+
       await command.execute(interaction);
+
+      logger.info(
+        `Successfully executed /${interaction.commandName} for user ${interaction.user.id}`
+      );
     } catch (error) {
-      logger.error(`Error executing /${interaction.commandName}:`, error);
+      logger.error(
+        `Error executing /${interaction.commandName}:`,
+        error
+      );
 
-      const errorMessage = formatUserErrorMessage(error);
+      const errorMessage =
+        '❌ Something went wrong while processing that command. Please try again.';
 
-      // Reply safely depending on whether response was already deferred or sent
       try {
         if (interaction.replied || interaction.deferred) {
-          await interaction.followUp({ content: errorMessage, ephemeral: true });
+          await interaction.followUp({
+            content: errorMessage,
+            flags: 64,
+          });
         } else {
-          await interaction.reply({ content: errorMessage, ephemeral: true });
+          await interaction.reply({
+            content: errorMessage,
+            flags: 64,
+          });
         }
-      } catch (replyError) {
-        logger.error('Failed to send error notification to interaction:', replyError);
+      } catch (responseError) {
+        logger.error(
+          'Failed to send interaction error response:',
+          responseError
+        );
       }
     }
-    return;
-  }
-
-  // Future milestone handler for Buttons (e.g. Escape Room, Arcade, Shop)
-  if (interaction.isButton()) {
-    logger.debug(`Received button interaction: ${interaction.customId} from ${interaction.user.tag}`);
-    // Prepared for future component handlers
-    return;
-  }
-
-  // Future milestone handler for Select Menus (e.g. Shop item selector)
-  if (interaction.isAnySelectMenu()) {
-    logger.debug(`Received select menu interaction: ${interaction.customId} from ${interaction.user.tag}`);
-    return;
-  }
-
-  // Future milestone handler for Modals (e.g. Escape Room riddle input)
-  if (interaction.isModalSubmit()) {
-    logger.debug(`Received modal submission: ${interaction.customId} from ${interaction.user.tag}`);
-    return;
-  }
-}
-
-export default { name, once, execute };
+  },
+};

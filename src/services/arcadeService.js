@@ -1,46 +1,155 @@
-import { logger } from '../utils/logger.js';
-import { DEFAULTS } from '../config/defaults.js';
+import { execute, queryOne } from '../database/client.js';
 import { EconomyService } from './economyService.js';
+import { DEFAULTS } from '../config/defaults.js';
+import { getManilaDate } from '../utils/time.js';
 
-/**
- * Arcade Service Architecture Foundation
- * 
- * Future Milestone Features:
- * - Quick arcade games (Lucky Spin, Quick Math, Number Guess, High Card, Bomb Defusal)
- * - Daily arcade attempt limit tracking
- * - Reward distribution through EconomyService
- * 
- * NOTE: Currently in foundation mode. Games are NOT enabled yet.
- */
+const DAILY_ATTEMPTS = DEFAULTS.ARCADE.DAILY_ATTEMPTS;
+
 export class ArcadeService {
-  /**
-   * Checks remaining daily game attempts for a member.
-   * @param {string} guildId
-   * @param {string} discordUserId
-   * @returns {Promise<{ attemptsRemaining: number, maxDaily: number }>}
-   */
-  static async getRemainingAttempts(guildId, discordUserId) {
-    logger.debug(`[Placeholder] ArcadeService: getRemainingAttempts for ${discordUserId}`);
+  static async getDailyAttempts(guildId, userId, activityDate = getManilaDate()) {
+    const row = await queryOne(
+      `SELECT attempt_count
+       FROM arcade_daily_limits
+       WHERE guild_id = ?
+         AND discord_user_id = ?
+         AND activity_date = ?`,
+      [guildId, userId, activityDate]
+    );
+
+    return Number(row?.attempt_count || 0);
+  }
+
+  static async getRemainingAttempts(
+    guildId,
+    userId,
+    activityDate = getManilaDate()
+  ) {
+    const used = await this.getDailyAttempts(
+      guildId,
+      userId,
+      activityDate
+    );
+
+    return Math.max(0, DAILY_ATTEMPTS - used);
+  }
+
+  static async recordAttempt(
+    guildId,
+    userId,
+    gameType,
+    result,
+    rewardAmount = 0,
+    activityDate = getManilaDate()
+  ) {
+    const used = await this.getDailyAttempts(
+      guildId,
+      userId,
+      activityDate
+    );
+
+    if (used >= DAILY_ATTEMPTS) {
+      return {
+        allowed: false,
+        reason: 'daily_limit_reached',
+        remainingAttempts: 0,
+      };
+    }
+
+    await execute(
+      `INSERT INTO arcade_attempts
+       (
+         guild_id,
+         discord_user_id,
+         activity_date,
+         game_type,
+         result,
+         reward_amount
+       )
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        guildId,
+        userId,
+        activityDate,
+        gameType,
+        result,
+        rewardAmount,
+      ]
+    );
+
+    await execute(
+      `INSERT INTO arcade_daily_limits
+       (
+         guild_id,
+         discord_user_id,
+         activity_date,
+         attempt_count,
+         updated_at
+       )
+       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(guild_id, discord_user_id, activity_date)
+       DO UPDATE SET
+         attempt_count = attempt_count + 1,
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        guildId,
+        userId,
+        activityDate,
+        1,
+      ]
+    );
+
     return {
-      attemptsRemaining: DEFAULTS.ARCADE.DAILY_ATTEMPTS,
-      maxDaily: DEFAULTS.ARCADE.DAILY_ATTEMPTS,
+      allowed: true,
+      remainingAttempts: Math.max(0, DAILY_ATTEMPTS - used - 1),
     };
   }
 
-  /**
-   * Records game play attempt and calculates rewards.
-   * @param {string} guildId
-   * @param {string} discordUserId
-   * @param {string} gameKey
-   * @param {number} wager
-   * @returns {Promise<Object>}
-   */
-  static async playArcadeGame(guildId, discordUserId, gameKey, wager = 0) {
-    logger.info(`[Placeholder] ArcadeService: playArcadeGame ${gameKey} for ${discordUserId}`);
+  static async playGame({
+    guildId,
+    userId,
+    gameType,
+    result,
+    rewardAmount = 0,
+    rewardSource,
+    transactionMeta = {},
+  }) {
+    const attempt = await this.recordAttempt(
+      guildId,
+      userId,
+      gameType,
+      result,
+      rewardAmount
+    );
+
+    if (!attempt.allowed) {
+      return attempt;
+    }
+
+    let newBalance = null;
+
+    if (rewardAmount > 0) {
+      const economyResult = await EconomyService.addCurrency(
+        guildId,
+        userId,
+        rewardAmount,
+        rewardSource || `arcade_${gameType}`,
+        transactionMeta
+      );
+
+      newBalance = economyResult.newBalance;
+    }
+
     return {
-      success: false,
-      message: 'Arcade games are scheduled for the next development milestone.',
+      allowed: true,
+      result,
+      rewardAmount,
+      newBalance,
+      remainingAttempts: attempt.remainingAttempts,
     };
+  }
+
+  static getDailyAttemptLimit() {
+    return DAILY_ATTEMPTS;
   }
 }
 
