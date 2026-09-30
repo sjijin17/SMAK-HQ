@@ -98,7 +98,7 @@ export class EconomyService {
    * @param {string} [reason='admin_adjustment']
    * @returns {Promise<{ newBalance: number }>}
    */
-  static async addCurrency(guildId, discordUserId, amount, reason = 'standard_credit') {
+  static async addCurrency(guildId, discordUserId, amount, reason = 'standard_credit', transactionMeta = {}) {
     if (!isValidCurrencyAmount(amount) || amount <= 0) {
       throw new ValidationError('Amount to add must be a positive integer.');
     }
@@ -114,6 +114,23 @@ export class EconomyService {
     );
 
     const newBalance = await this.getBalance(guildId, discordUserId);
+
+    await execute(
+      `INSERT INTO transactions
+       (guild_id, discord_user_id, type, amount, balance_after, reference_type, reference_id, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        guildId,
+        discordUserId,
+        reason,
+        amount,
+        newBalance,
+        transactionMeta.referenceType || null,
+        transactionMeta.referenceId || null,
+        transactionMeta.description || null,
+      ]
+    );
+
     logger.info(`Added ${amount} credits to user ${discordUserId} in guild ${guildId}. Reason: ${reason}. New balance: ${newBalance}`);
     return { newBalance };
   }
@@ -126,7 +143,7 @@ export class EconomyService {
    * @param {string} [reason='standard_debit']
    * @returns {Promise<{ newBalance: number }>}
    */
-  static async removeCurrency(guildId, discordUserId, amount, reason = 'standard_debit') {
+  static async removeCurrency(guildId, discordUserId, amount, reason = 'standard_debit', transactionMeta = {}) {
     if (!isValidCurrencyAmount(amount) || amount <= 0) {
       throw new ValidationError('Amount to remove must be a positive integer.');
     }
@@ -151,6 +168,23 @@ export class EconomyService {
     }
 
     const newBalance = await this.getBalance(guildId, discordUserId);
+
+    await execute(
+      `INSERT INTO transactions
+       (guild_id, discord_user_id, type, amount, balance_after, reference_type, reference_id, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        guildId,
+        discordUserId,
+        reason,
+        -amount,
+        newBalance,
+        transactionMeta.referenceType || null,
+        transactionMeta.referenceId || null,
+        transactionMeta.description || null,
+      ]
+    );
+
     logger.info(`Deducted ${amount} credits from user ${discordUserId} in guild ${guildId}. Reason: ${reason}. New balance: ${newBalance}`);
     return { newBalance };
   }
