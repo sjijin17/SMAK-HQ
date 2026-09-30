@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Environment files and credentials (NEVER commit secrets!)
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# Editor and IDE directories
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Build and temporary files
+dist/
+dist-ssr/
+*.local
+.turbo
+.cache
+
+# Docker
+.docker/

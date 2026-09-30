@@ -1,0 +1,6 @@
+{
+  "name": "Discord Economy & Entertainment Bot",
+  "description": "Production-ready Discord economy and entertainment bot built with Discord.js v14, Turso libSQL, Docker, and Google Cloud Run.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
