@@ -103,35 +103,43 @@ export class EconomyService {
       throw new ValidationError('Amount to add must be a positive integer.');
     }
 
-    // Ensure account exists
     await this.getOrCreateAccount(guildId, discordUserId);
 
-    await execute(
-      `UPDATE users 
-       SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP 
-       WHERE guild_id = ? AND discord_user_id = ?`,
-      [amount, guildId, discordUserId]
+    const results = await batch([
+      {
+        sql: `UPDATE users
+              SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP
+              WHERE guild_id = ? AND discord_user_id = ?`,
+        args: [amount, guildId, discordUserId],
+      },
+      {
+        sql: `INSERT INTO transactions
+              (guild_id, discord_user_id, type, amount, balance_after, reference_type, reference_id, description)
+              SELECT ?, ?, ?, ?, balance, ?, ?, ?
+              FROM users
+              WHERE guild_id = ? AND discord_user_id = ?`,
+        args: [
+          guildId,
+          discordUserId,
+          reason,
+          amount,
+          transactionMeta.referenceType || null,
+          transactionMeta.referenceId || null,
+          transactionMeta.description || null,
+          guildId,
+          discordUserId,
+        ],
+      },
+    ]);
+
+    const newBalance = Number(
+      await this.getBalance(guildId, discordUserId)
     );
 
-    const newBalance = await this.getBalance(guildId, discordUserId);
-
-    await execute(
-      `INSERT INTO transactions
-       (guild_id, discord_user_id, type, amount, balance_after, reference_type, reference_id, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        guildId,
-        discordUserId,
-        reason,
-        amount,
-        newBalance,
-        transactionMeta.referenceType || null,
-        transactionMeta.referenceId || null,
-        transactionMeta.description || null,
-      ]
+    logger.info(
+      `Added ${amount} credits to user ${discordUserId} in guild ${guildId}. Reason: ${reason}. New balance: ${newBalance}`
     );
 
-    logger.info(`Added ${amount} credits to user ${discordUserId} in guild ${guildId}. Reason: ${reason}. New balance: ${newBalance}`);
     return { newBalance };
   }
 
@@ -149,43 +157,56 @@ export class EconomyService {
     }
 
     const currentBalance = await this.getBalance(guildId, discordUserId);
+
     if (currentBalance < amount) {
       throw new ValidationError(
         `Insufficient funds. Current balance: ${currentBalance} credits, needed: ${amount} credits.`
       );
     }
 
-    // Atomic update preventing negative balance
-    const result = await execute(
-      `UPDATE users 
-       SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP 
-       WHERE guild_id = ? AND discord_user_id = ? AND balance >= ?`,
-      [amount, guildId, discordUserId, amount]
-    );
+    const results = await batch([
+      {
+        sql: `UPDATE users
+              SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP
+              WHERE guild_id = ? AND discord_user_id = ? AND balance >= ?`,
+        args: [amount, guildId, discordUserId, amount],
+      },
+      {
+        sql: `INSERT INTO transactions
+              (guild_id, discord_user_id, type, amount, balance_after, reference_type, reference_id, description)
+              SELECT ?, ?, ?, ?, balance, ?, ?, ?
+              FROM users
+              WHERE guild_id = ? AND discord_user_id = ?`,
+        args: [
+          guildId,
+          discordUserId,
+          reason,
+          -amount,
+          transactionMeta.referenceType || null,
+          transactionMeta.referenceId || null,
+          transactionMeta.description || null,
+          guildId,
+          discordUserId,
+        ],
+      },
+    ]);
 
-    if (result.rowsAffected === 0) {
-      throw new ValidationError('Transaction failed: Insufficient balance or concurrent modification.');
+    const updateResult = results[0];
+
+    if (!updateResult || updateResult.rowsAffected === 0) {
+      throw new ValidationError(
+        'Transaction failed: Insufficient balance or concurrent modification.'
+      );
     }
 
-    const newBalance = await this.getBalance(guildId, discordUserId);
-
-    await execute(
-      `INSERT INTO transactions
-       (guild_id, discord_user_id, type, amount, balance_after, reference_type, reference_id, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        guildId,
-        discordUserId,
-        reason,
-        -amount,
-        newBalance,
-        transactionMeta.referenceType || null,
-        transactionMeta.referenceId || null,
-        transactionMeta.description || null,
-      ]
+    const newBalance = Number(
+      await this.getBalance(guildId, discordUserId)
     );
 
-    logger.info(`Deducted ${amount} credits from user ${discordUserId} in guild ${guildId}. Reason: ${reason}. New balance: ${newBalance}`);
+    logger.info(
+      `Deducted ${amount} credits from user ${discordUserId} in guild ${guildId}. Reason: ${reason}. New balance: ${newBalance}`
+    );
+
     return { newBalance };
   }
 
@@ -207,31 +228,83 @@ export class EconomyService {
       throw new ValidationError('Transfer amount must be a positive integer.');
     }
 
-    // Ensure both accounts exist
     await this.getOrCreateAccount(guildId, senderUserId);
     await this.getOrCreateAccount(guildId, recipientUserId);
 
     const senderBalance = await this.getBalance(guildId, senderUserId);
+
     if (senderBalance < amount) {
       throw new ValidationError(`Insufficient funds to transfer ${amount} credits.`);
     }
 
-    // Execute atomic batch transaction
-    await batch([
+    const results = await batch([
       {
-        sql: `UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP 
+        sql: `UPDATE users
+              SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP
               WHERE guild_id = ? AND discord_user_id = ? AND balance >= ?`,
         args: [amount, guildId, senderUserId, amount],
       },
       {
-        sql: `UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP 
+        sql: `UPDATE users
+              SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP
               WHERE guild_id = ? AND discord_user_id = ?`,
         args: [amount, guildId, recipientUserId],
       },
+      {
+        sql: `INSERT INTO transactions
+              (guild_id, discord_user_id, type, amount, balance_after, reference_type, reference_id, description)
+              SELECT ?, ?, ?, ?, balance, ?, ?, ?
+              FROM users
+              WHERE guild_id = ? AND discord_user_id = ?`,
+        args: [
+          guildId,
+          senderUserId,
+          reason,
+          -amount,
+          'transfer',
+          recipientUserId,
+          `Transfer to ${recipientUserId}`,
+          guildId,
+          senderUserId,
+        ],
+      },
+      {
+        sql: `INSERT INTO transactions
+              (guild_id, discord_user_id, type, amount, balance_after, reference_type, reference_id, description)
+              SELECT ?, ?, ?, ?, balance, ?, ?, ?
+              FROM users
+              WHERE guild_id = ? AND discord_user_id = ?`,
+        args: [
+          guildId,
+          recipientUserId,
+          reason,
+          amount,
+          'transfer',
+          senderUserId,
+          `Transfer from ${senderUserId}`,
+          guildId,
+          recipientUserId,
+        ],
+      },
     ]);
 
-    const senderNewBalance = await this.getBalance(guildId, senderUserId);
-    const recipientNewBalance = await this.getBalance(guildId, recipientUserId);
+    if (!results[0] || results[0].rowsAffected === 0) {
+      throw new ValidationError(
+        'Transfer failed: Insufficient balance or concurrent modification.'
+      );
+    }
+
+    if (!results[1] || results[1].rowsAffected === 0) {
+      throw new DatabaseError('Transfer failed: recipient account could not be updated.');
+    }
+
+    const senderNewBalance = Number(
+      await this.getBalance(guildId, senderUserId)
+    );
+
+    const recipientNewBalance = Number(
+      await this.getBalance(guildId, recipientUserId)
+    );
 
     logger.info(
       `Transferred ${amount} credits from ${senderUserId} to ${recipientUserId} in guild ${guildId}. Reason: ${reason}`

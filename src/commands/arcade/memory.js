@@ -40,8 +40,10 @@ export const data = new SlashCommandBuilder()
   .setName('memory')
   .setDescription('Remember the sequence and reproduce it.');
 
-export async function execute(interaction) {
-  await interaction.deferReply({ ephemeral: true });
+export async function startMemory(interaction, deferred = false) {
+  if (!deferred) {
+    await interaction.deferReply({ flags: 64 });
+  }
 
   const remainingAttempts = await ArcadeService.getRemainingAttempts(
     interaction.guildId,
@@ -181,7 +183,15 @@ export async function execute(interaction) {
 
     await interaction.editReply({
       embeds: [resultEmbed],
-      components: [],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`arcade-back:${interaction.user.id}`)
+            .setLabel('Back to Arcade')
+            .setEmoji('🎮')
+            .setStyle(ButtonStyle.Secondary)
+        ),
+      ],
     });
   });
 
@@ -198,9 +208,21 @@ export async function execute(interaction) {
             `⏰ You didn't complete the sequence in time.\n\nThe correct sequence was **${sequence.join('  ')}**.`
           ),
       ],
-      components: [],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`arcade-back:${interaction.user.id}`)
+            .setLabel('Back to Arcade')
+            .setEmoji('🎮')
+            .setStyle(ButtonStyle.Secondary)
+        ),
+      ],
     }).catch(() => {});
   });
+}
+
+export async function execute(interaction) {
+  await startMemory(interaction, false);
 }
 
 export default { data, execute };

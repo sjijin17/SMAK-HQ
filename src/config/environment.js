@@ -22,6 +22,10 @@ export const env = {
   PORT: parseInt(process.env.PORT || '8080', 10),
   NODE_ENV: process.env.NODE_ENV || 'development',
 
+  // Optional Arcade-only testing override.
+  // Leave empty in normal use.
+  ARCADE_TEST_DATE: process.env.ARCADE_TEST_DATE || '',
+
   // Convenience flags
   isProduction: (process.env.NODE_ENV || 'development') === 'production',
   isDevelopment: (process.env.NODE_ENV || 'development') === 'development',

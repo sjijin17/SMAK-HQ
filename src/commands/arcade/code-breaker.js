@@ -1,6 +1,9 @@
 import {
   SlashCommandBuilder,
   EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } from 'discord.js';
 import { ArcadeService } from '../../services/arcadeService.js';
 import { EconomyService } from '../../services/economyService.js';
@@ -102,12 +105,16 @@ export const data = new SlashCommandBuilder()
       .setRequired(false)
   );
 
-export async function execute(interaction) {
-  await interaction.deferReply({ ephemeral: true });
+export async function startCodeBreaker(interaction, deferred = false) {
+  if (!deferred) {
+    await interaction.deferReply({ flags: 64 });
+  }
 
   const userId = interaction.user.id;
   const guildId = interaction.guildId;
-  const guess = interaction.options.getString('guess')?.trim();
+  const guess = interaction.isChatInputCommand()
+    ? interaction.options.getString('guess')?.trim()
+    : null;
 
   let session = activeSessions.get(userId);
 
@@ -254,6 +261,15 @@ export async function execute(interaction) {
               `**${arcadeResult.remainingAttempts} / ${DEFAULTS.ARCADE.DAILY_ATTEMPTS}**`,
           }),
       ],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`arcade-back:${interaction.user.id}`)
+            .setLabel('Back to Arcade')
+            .setEmoji('🎮')
+            .setStyle(ButtonStyle.Secondary)
+        ),
+      ],
     });
 
     return;
@@ -311,6 +327,15 @@ export async function execute(interaction) {
               `**${arcadeResult.remainingAttempts} / ${DEFAULTS.ARCADE.DAILY_ATTEMPTS}**`,
           }),
       ],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`arcade-back:${interaction.user.id}`)
+            .setLabel('Back to Arcade')
+            .setEmoji('🎮')
+            .setStyle(ButtonStyle.Secondary)
+        ),
+      ],
     });
 
     return;
@@ -322,6 +347,10 @@ export async function execute(interaction) {
       `🔐 Guess **${session.guesses.length}** recorded.\n\n` +
       'Submit your next guess using `/code-breaker`.',
   });
+}
+
+export async function execute(interaction) {
+  await startCodeBreaker(interaction, false);
 }
 
 export default { data, execute };

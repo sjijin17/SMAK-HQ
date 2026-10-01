@@ -1,4 +1,10 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from 'discord.js';
 import { ArcadeService } from '../../services/arcadeService.js';
 import { EconomyService } from '../../services/economyService.js';
 import { DEFAULTS } from '../../config/defaults.js';
@@ -20,10 +26,10 @@ export const data = new SlashCommandBuilder()
       )
   );
 
-export async function execute(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-
-  const choice = interaction.options.getString('choice', true);
+export async function playHigherLower(interaction, choice, deferred = false) {
+  if (!deferred) {
+    await interaction.deferReply({ flags: 64 });
+  }
 
   const remainingAttempts = await ArcadeService.getRemainingAttempts(
     interaction.guildId,
@@ -114,7 +120,21 @@ export async function execute(interaction) {
 
   await interaction.editReply({
     embeds: [embed],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`arcade-back:${interaction.user.id}`)
+          .setLabel('Back to Arcade')
+          .setEmoji('🎮')
+          .setStyle(ButtonStyle.Secondary)
+      ),
+    ],
   });
+}
+
+export async function execute(interaction) {
+  const choice = interaction.options.getString('choice', true);
+  await playHigherLower(interaction, choice, false);
 }
 
 export default { data, execute };

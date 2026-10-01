@@ -2,11 +2,16 @@ import { execute, queryOne } from '../database/client.js';
 import { EconomyService } from './economyService.js';
 import { DEFAULTS } from '../config/defaults.js';
 import { getManilaDate } from '../utils/time.js';
+import env from '../config/environment.js';
 
 const DAILY_ATTEMPTS = DEFAULTS.ARCADE.DAILY_ATTEMPTS;
 
+function getArcadeActivityDate() {
+  return env.ARCADE_TEST_DATE || getManilaDate();
+}
+
 export class ArcadeService {
-  static async getDailyAttempts(guildId, userId, activityDate = getManilaDate()) {
+  static async getDailyAttempts(guildId, userId, activityDate = getArcadeActivityDate()) {
     const row = await queryOne(
       `SELECT attempt_count
        FROM arcade_daily_limits
@@ -22,7 +27,7 @@ export class ArcadeService {
   static async getRemainingAttempts(
     guildId,
     userId,
-    activityDate = getManilaDate()
+    activityDate = getArcadeActivityDate()
   ) {
     const used = await this.getDailyAttempts(
       guildId,
@@ -39,7 +44,7 @@ export class ArcadeService {
     gameType,
     result,
     rewardAmount = 0,
-    activityDate = getManilaDate()
+    activityDate = getArcadeActivityDate()
   ) {
     const used = await this.getDailyAttempts(
       guildId,

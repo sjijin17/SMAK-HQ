@@ -1,5 +1,12 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from 'discord.js';
 import { ArcadeService } from '../../services/arcadeService.js';
+import { EconomyService } from '../../services/economyService.js';
 import { DEFAULTS } from '../../config/defaults.js';
 
 const BET_AMOUNT = 10;
@@ -19,97 +26,127 @@ export const data = new SlashCommandBuilder()
       )
   );
 
-export async function execute(interaction) {
-  const choice = interaction.options.getString('choice', true);
-
-  const { EconomyService } = await import('../../services/economyService.js');
-
-  const remainingAttempts = await ArcadeService.getRemainingAttempts(
-    interaction.guildId,
-    interaction.user.id
-  );
-
-  if (remainingAttempts <= 0) {
-    await interaction.reply({
-      content: `🎮 You have used all **${DEFAULTS.ARCADE.DAILY_ATTEMPTS} Arcade attempts** for today.`,
-      ephemeral: true,
-    });
-    return;
-  }
-
-  const balance = await EconomyService.getBalance(
-    interaction.guildId,
-    interaction.user.id
-  );
-
-  if (balance < BET_AMOUNT) {
-    await interaction.reply({
-      content: `🪙 You need at least **${BET_AMOUNT} ${DEFAULTS.ECONOMY.CURRENCY_NAME}** to play.`,
-      ephemeral: true,
-    });
-    return;
+export async function playCoinflip(interaction, choice, deferred = false) {
+  if (!deferred) {
+    await interaction.deferReply({ flags: 64 });
   }
 
   const result = Math.random() < 0.5 ? 'heads' : 'tails';
   const won = result === choice;
 
-  const finalResult = won ? 'win' : 'loss';
-  const rewardAmount = won ? WIN_REWARD : 0;
-
-  if (!won) {
-    await EconomyService.removeCurrency(
+  if (won) {
+    const economyResult = await EconomyService.addCurrency(
       interaction.guildId,
       interaction.user.id,
-      BET_AMOUNT,
-      'arcade_coinflip_loss',
+      WIN_REWARD,
+      'arcade_coinflip_win',
       {
-        referenceType: 'arcade_game',
-        referenceId: interaction.id,
-        description: 'Coinflip losing bet',
+        gameType: 'coinflip',
+        choice,
+        result,
       }
     );
-  }
 
-  const arcadeResult = await ArcadeService.playGame({
-    guildId: interaction.guildId,
-    userId: interaction.user.id,
-    gameType: 'coinflip',
-    result: finalResult,
-    rewardAmount,
-    rewardSource: 'arcade_coinflip_win',
-    transactionMeta: {
-      referenceType: 'arcade_game',
-      referenceId: interaction.id,
-      description: 'Coinflip winning reward',
-    },
-  });
+    const attempt = await ArcadeService.recordAttempt(
+      interaction.guildId,
+      interaction.user.id,
+      'coinflip',
+      'win',
+      WIN_REWARD
+    );
 
-  if (!arcadeResult.allowed) {
-    await interaction.reply({
-      content: '🎮 You have used all 5 Arcade attempts for today.',
-      ephemeral: true,
+    const embed = new EmbedBuilder()
+      .setTitle('🪙 Coinflip — WIN!')
+      .setDescription(
+        `The coin landed on **${result}**!\n\n` +
+        `You chose **${choice}** and won **${WIN_REWARD} ${DEFAULTS.ECONOMY.CURRENCY_NAME}**.`
+      )
+      .addFields(
+        {
+          name: '💰 Balance',
+          value: `**${economyResult.newBalance} ${DEFAULTS.ECONOMY.CURRENCY_NAME}**`,
+          inline: true,
+        },
+        {
+          name: '🎟️ Attempts Remaining',
+          value: `**${attempt.remainingAttempts} / ${DEFAULTS.ARCADE.DAILY_ATTEMPTS}**`,
+          inline: true,
+        }
+      );
+
+    await interaction.editReply({
+      embeds: [embed],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`arcade-back:${interaction.user.id}`)
+            .setLabel('Back to Arcade')
+            .setEmoji('🎮')
+            .setStyle(ButtonStyle.Secondary)
+        ),
+      ],
     });
+
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setTitle('🪙 Coinflip')
-    .setDescription(
-      won
-        ? `The coin landed on **${result}**!\n\n🎉 You won **${WIN_REWARD} ${DEFAULTS.ECONOMY.CURRENCY_NAME}**!`
-        : `The coin landed on **${result}**.\n\nYou lost **${BET_AMOUNT} ${DEFAULTS.ECONOMY.CURRENCY_NAME}**.`
-    )
-    .addFields({
-      name: 'Attempts Remaining',
-      value: `**${arcadeResult.remainingAttempts} / ${DEFAULTS.ARCADE.DAILY_ATTEMPTS}**`,
-      inline: true,
-    })
-    .setColor(won ? 0x2ecc71 : 0xe74c3c);
+  const economyResult = await EconomyService.removeCurrency(
+    interaction.guildId,
+    interaction.user.id,
+    BET_AMOUNT,
+    'arcade_coinflip_loss',
+    {
+      gameType: 'coinflip',
+      choice,
+      result,
+    }
+  );
 
-  await interaction.reply({
+  const attempt = await ArcadeService.recordAttempt(
+    interaction.guildId,
+    interaction.user.id,
+    'coinflip',
+    'loss',
+    0
+  );
+
+  const embed = new EmbedBuilder()
+    .setTitle('🪙 Coinflip — LOSS')
+    .setDescription(
+      `The coin landed on **${result}**!\n\n` +
+      `You chose **${choice}** and lost **${BET_AMOUNT} ${DEFAULTS.ECONOMY.CURRENCY_NAME}**.`
+    )
+    .addFields(
+      {
+        name: '💰 Balance',
+        value: `**${economyResult.newBalance} ${DEFAULTS.ECONOMY.CURRENCY_NAME}**`,
+        inline: true,
+      },
+      {
+        name: '🎟️ Attempts Remaining',
+        value: `**${attempt.remainingAttempts} / ${DEFAULTS.ARCADE.DAILY_ATTEMPTS}**`,
+        inline: true,
+      }
+    );
+
+  await interaction.editReply({
     embeds: [embed],
-    ephemeral: true,
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`arcade-back:${interaction.user.id}`)
+          .setLabel('Back to Arcade')
+          .setEmoji('🎮')
+          .setStyle(ButtonStyle.Secondary)
+      ),
+    ],
   });
+}
+
+export async function execute(interaction) {
+  const choice = interaction.options.getString('choice', true);
+
+  await playCoinflip(interaction, choice, false);
 }
 
 export default { data, execute };
