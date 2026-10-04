@@ -1,7 +1,7 @@
 import { batch, query, queryOne } from '../database/client.js';
 import { env } from '../config/environment.js';
 import { getManilaDate } from '../utils/time.js';
-import { EconomyError } from '../utils/errors.js';
+import { ValidationError } from '../utils/errors.js';
 
 const ROBBERY_CONFIG = {
   DAILY_ATTEMPTS: 1,
@@ -19,7 +19,7 @@ function normalizeAmount(value) {
   const amount = Number(value);
 
   if (!Number.isInteger(amount) || amount <= 0) {
-    throw new EconomyError('Robbery amount must be a positive whole number.');
+    throw new ValidationError('Robbery amount must be a positive whole number.');
   }
 
   return amount;
@@ -141,17 +141,17 @@ export function validateRobberyAmount(amount, targetBalance) {
   const balance = Number(targetBalance);
 
   if (!Number.isInteger(balance) || balance < 0) {
-    throw new EconomyError('Target balance is invalid.');
+    throw new ValidationError('Target balance is invalid.');
   }
 
   if (normalizedAmount < ROBBERY_CONFIG.MIN_ATTEMPT_AMOUNT) {
-    throw new EconomyError(
+    throw new ValidationError(
       `The minimum robbery amount is ${ROBBERY_CONFIG.MIN_ATTEMPT_AMOUNT}.`,
     );
   }
 
   if (normalizedAmount > balance) {
-    throw new EconomyError('You cannot attempt to rob more than the target currently has.');
+    throw new ValidationError('You cannot attempt to rob more than the target currently has.');
   }
 
   const maximumAmount = Math.floor(
@@ -159,11 +159,11 @@ export function validateRobberyAmount(amount, targetBalance) {
   );
 
   if (maximumAmount < ROBBERY_CONFIG.MIN_ATTEMPT_AMOUNT) {
-    throw new EconomyError('The target does not have enough currency to be robbed.');
+    throw new ValidationError('The target does not have enough currency to be robbed.');
   }
 
   if (normalizedAmount > maximumAmount) {
-    throw new EconomyError(
+    throw new ValidationError(
       `You can attempt to rob at most ${maximumAmount} currency from this member.`,
     );
   }
@@ -182,11 +182,11 @@ export async function recordRobberyAttempt({
   jailRecordId = null,
 }) {
   if (!guildId || !robberUserId || !targetUserId) {
-    throw new EconomyError('Robbery participant information is required.');
+    throw new ValidationError('Robbery participant information is required.');
   }
 
   if (robberUserId === targetUserId) {
-    throw new EconomyError('You cannot rob yourself.');
+    throw new ValidationError('You cannot rob yourself.');
   }
 
   const amount = normalizeAmount(attemptedAmount);
@@ -234,7 +234,7 @@ export async function executeSuccessfulRobbery({
   const robberyAmount = normalizeAmount(amount);
 
   if (robberUserId === targetUserId) {
-    throw new EconomyError('You cannot rob yourself.');
+    throw new ValidationError('You cannot rob yourself.');
   }
 
   const activityDate = getActivityDate();
@@ -360,7 +360,7 @@ export async function executeFailedRobbery({
   const penalty = normalizeAmount(penaltyAmount);
 
   if (robberUserId === targetUserId) {
-    throw new EconomyError('You cannot rob yourself.');
+    throw new ValidationError('You cannot rob yourself.');
   }
 
   const result = await batch(
@@ -423,7 +423,7 @@ export async function executeFailedRobbery({
   const updateResult = result[0];
 
   if (!updateResult || Number(updateResult.rowsAffected || 0) !== 1) {
-    throw new EconomyError(
+    throw new ValidationError(
       `You do not have enough currency to pay the robbery failure penalty of ${penalty}.`,
     );
   }
