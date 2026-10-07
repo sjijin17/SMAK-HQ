@@ -82,7 +82,6 @@ function normalizeSession(row) {
     deadlineAt: row.deadline_at ?? null,
     endedAt: row.ended_at ?? null,
     voiceReadyAt: row.voice_ready_at ?? null,
-    requiredVoiceChannelId: row.required_voice_channel_id ?? null,
     hintsUsed: Number(row.hints_used),
     wrongSubmissions: Number(row.wrong_submissions),
     finalAnswer: row.final_answer ?? null,
@@ -293,67 +292,21 @@ export class EscapeRoomService {
   static async updateCaseStatus(caseId, status) {
     assertCaseStatus(status);
 
-    const escapeCase = await queryOne(
-      `
-        SELECT *
-        FROM escape_cases
-        WHERE id = ?
-      `,
-      [caseId]
-    );
-
-    if (!escapeCase) {
-      throw new Error(`Escape case ${caseId} was not found.`);
-    }
-
-    if (status === 'PUBLISHED') {
-      await batch([
-        {
-          sql: `
-            UPDATE escape_cases
-            SET
-              status = 'ARCHIVED',
-              updated_at = CURRENT_TIMESTAMP
-            WHERE guild_id = ?
-              AND status = 'PUBLISHED'
-              AND id != ?
-          `,
-          args: [escapeCase.guild_id, caseId],
-        },
-        {
-          sql: `
-            UPDATE escape_cases
-            SET
-              status = 'PUBLISHED',
-              updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-          `,
-          args: [caseId],
-        },
-      ], 'write');
-    } else {
-      await batch([
-        {
-          sql: `
-            UPDATE escape_cases
-            SET
-              status = ?,
-              updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-          `,
-          args: [status, caseId],
-        },
-      ], 'write');
-    }
-
     const result = await queryOne(
       `
-        SELECT *
-        FROM escape_cases
+        UPDATE escape_cases
+        SET
+          status = ?,
+          updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
+        RETURNING *
       `,
-      [caseId]
+      [status, caseId]
     );
+
+    if (!result) {
+      throw new Error(`Escape case ${caseId} was not found.`);
+    }
 
     logger.info(
       `Escape case ${caseId} status changed to ${status}.`
@@ -668,76 +621,6 @@ export class EscapeRoomService {
     });
 
     return updated;
-  }
-
-  /**
-   * Expires ACTIVE sessions whose authoritative deadline has passed.
-   *
-   * This is safe to call repeatedly. The status transition is atomic,
-   * so only the process that successfully changes ACTIVE -> EXPIRED
-   * performs the expiration audit/update work.
-   */
-  static async expireDueSessions() {
-    const now = new Date().toISOString();
-
-    const dueSessions = await query(
-      `
-        SELECT *
-        FROM escape_sessions
-        WHERE status = 'ACTIVE'
-          AND deadline_at IS NOT NULL
-          AND deadline_at <= ?
-        ORDER BY id ASC
-      `,
-      [now]
-    );
-
-    const expiredSessions = [];
-
-    for (const row of dueSessions) {
-      const updated = await queryOne(
-        `
-          UPDATE escape_sessions
-          SET
-            status = 'EXPIRED',
-            ended_at = COALESCE(ended_at, ?),
-            result_note = COALESCE(
-              result_note,
-              'The investigation timed out before the team completed the case.'
-            ),
-            updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-            AND status = 'ACTIVE'
-            AND deadline_at IS NOT NULL
-            AND deadline_at <= ?
-          RETURNING *
-        `,
-        [now, row.id, now]
-      );
-
-      if (!updated) {
-        continue;
-      }
-
-      const expiredSession = normalizeSession(updated);
-
-      await this.recordEvent({
-        sessionId: expiredSession.id,
-        eventType: 'SESSION_EXPIRED',
-        eventData: {
-          expiredAt: now,
-          deadlineAt: expiredSession.deadlineAt,
-        },
-      });
-
-      logger.info(
-        `Escape session ${expiredSession.id} expired at ${now}.`
-      );
-
-      expiredSessions.push(expiredSession);
-    }
-
-    return expiredSessions;
   }
 
   // ==========================================================================

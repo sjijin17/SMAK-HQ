@@ -135,13 +135,7 @@ export async function getVoiceReadyState(sessionId) {
     (player) => player.participationStatus === 'ACTIVE'
   );
 
-  const escapeCase = await EscapeRoomService.getSessionCase(sessionId);
-
-  if (!escapeCase) {
-    return null;
-  }
-
-  const requiredPlayers = escapeCase.playerLimit;
+  const requiredPlayers = session.playerLimit;
   const presentPlayers = activePlayers.filter(
     (player) => player.voicePresent
   );

@@ -7,6 +7,119 @@ export default {
     if (interaction.isButton()) {
       const customId = interaction.customId;
 
+      // ==========================================================================
+      // ESCAPE ROOM SESSION BUTTONS
+      // ==========================================================================
+
+      if (customId.startsWith('escape-session:')) {
+        try {
+          const { handleEscapeSessionButton } = await import(
+            '../commands/escape/escape-home.js'
+          );
+
+          await handleEscapeSessionButton(interaction);
+        } catch (error) {
+          logger.error(
+            `Error handling Escape Room session button ${interaction.customId}:`,
+            error
+          );
+
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+              content:
+                '❌ Something went wrong while processing the Escape Room action.',
+              flags: 64,
+            }).catch(() => {});
+          }
+        }
+
+        return;
+      }
+
+      // ==========================================================================
+      // ESCAPE ROOM HOMEPAGE BUTTONS
+      // ==========================================================================
+
+      if (customId.startsWith('escape-home:')) {
+        const [, action] = customId.split(':');
+
+        try {
+          if (action === 'play') {
+            const { handleEscapePlay } = await import(
+              '../commands/escape/escape-home.js'
+            );
+
+            await handleEscapePlay(interaction);
+            return;
+          }
+
+          if (action === 'history') {
+            await interaction.reply({
+              content:
+                '📜 **GAME HISTORY**\n\nGame history is being connected to the Escape Room session records.',
+              flags: 64,
+            });
+            return;
+          }
+
+          if (action === 'leaderboard') {
+            await interaction.reply({
+              content:
+                '🏆 **LEADERBOARD**\n\nThe Escape Room leaderboard will use completed session results.',
+              flags: 64,
+            });
+            return;
+          }
+
+          if (action === 'stats') {
+            await interaction.reply({
+              content:
+                '📊 **MY STATS**\n\nYour Escape Room statistics will appear here once completed-session tracking is connected.',
+              flags: 64,
+            });
+            return;
+          }
+
+          if (action === 'monitor') {
+            if (!interaction.memberPermissions?.has('Administrator')) {
+              await interaction.reply({
+                content:
+                  '❌ Only server administrators can access the Escape Room monitor.',
+                flags: 64,
+              });
+              return;
+            }
+
+            await interaction.reply({
+              content:
+                '⚙️ **ADMIN MONITOR**\n\nThe live session monitor and player POV are being connected.',
+              flags: 64,
+            });
+            return;
+          }
+
+          await interaction.reply({
+            content: '❌ Unknown Escape Room action.',
+            flags: 64,
+          });
+        } catch (error) {
+          logger.error(
+            `Error handling Escape Room button ${interaction.customId}:`,
+            error
+          );
+
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+              content:
+                '❌ Something went wrong while opening the Escape Room menu.',
+              flags: 64,
+            }).catch(() => {});
+          }
+        }
+
+        return;
+      }
+
       // Return to Arcade hub.
       if (customId.startsWith('arcade-back:')) {
         const [, ownerId] = customId.split(':');

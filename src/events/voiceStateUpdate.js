@@ -6,13 +6,16 @@ export const name = Events.VoiceStateUpdate;
 
 export async function execute(oldState, newState) {
   try {
-    const guildId = newState.guild?.id ?? oldState.guild?.id;
+    console.log(
+      `[Escape Voice DEBUG] ${newState.id ?? oldState.id}: ` +
+      `${oldState.channelId ?? 'NONE'} -> ${newState.channelId ?? 'NONE'}`
+    );
 
-    if (!guildId) {
-      return;
-    }
+    const guildId = newState.guild?.id ?? oldState.guild?.id;
+    if (!guildId) return;
 
     const userId = newState.id ?? oldState.id;
+    if (!userId) return;
 
     const sessions = await EscapeRoomService.listSessions(guildId);
 
@@ -21,32 +24,23 @@ export async function execute(oldState, newState) {
     );
 
     for (const session of relevantSessions) {
-      const player = await EscapeRoomService.getPlayer(
-        session.id,
-        userId
-      );
+      const player = await EscapeRoomService.getPlayer(session.id, userId);
 
-      if (!player || player.participationStatus !== 'ACTIVE') {
-        continue;
-      }
+      if (!player || player.participationStatus !== 'ACTIVE') continue;
 
       const requiredChannelId = session.requiredVoiceChannelId;
 
-      if (!requiredChannelId) {
-        continue;
-      }
+      if (!requiredChannelId) continue;
 
-      const isNowInRequiredChannel =
-        newState.channelId === requiredChannelId;
+      const wasInRequiredChannel = oldState.channelId === requiredChannelId;
+      const isNowInRequiredChannel = newState.channelId === requiredChannelId;
 
-      const wasInRequiredChannel =
-        oldState.channelId === requiredChannelId;
+      if (wasInRequiredChannel === isNowInRequiredChannel) continue;
 
-      if (
-        isNowInRequiredChannel === wasInRequiredChannel
-      ) {
-        continue;
-      }
+      console.log(
+        `[Escape Voice] Session ${session.id}: ${userId} ` +
+        `${wasInRequiredChannel ? 'left' : 'joined'} required voice channel.`
+      );
 
       await setPlayerVoiceState({
         sessionId: session.id,
@@ -55,9 +49,6 @@ export async function execute(oldState, newState) {
       });
     }
   } catch (error) {
-    console.error(
-      '[Escape Voice] Failed to process voice state update:',
-      error
-    );
+    console.error('[Escape Voice] Failed to process voice state update:', error);
   }
 }

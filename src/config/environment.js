@@ -22,6 +22,11 @@ export const env = {
   PORT: parseInt(process.env.PORT || '8080', 10),
   NODE_ENV: process.env.NODE_ENV || 'development',
 
+  // Escape Room website authentication
+  ESCAPE_GAME_SECRET: process.env.ESCAPE_GAME_SECRET || '',
+  ESCAPE_GAME_BASE_URL:
+    process.env.ESCAPE_GAME_BASE_URL || 'http://localhost:3000',
+
   // Optional Arcade-only testing override.
   // Leave empty in normal use.
   ARCADE_TEST_DATE: process.env.ARCADE_TEST_DATE || '',

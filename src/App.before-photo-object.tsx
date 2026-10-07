@@ -104,295 +104,105 @@ function StudentPortrait({
 function Photograph({
   version,
   turned,
-  onTurnedChange,
+  rotation,
+  zoom,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onDoubleClick,
 }: {
   version: PhotoVersion;
   turned: boolean;
-  onTurnedChange: (turned: boolean) => void;
+  rotation: number;
+  zoom: number;
+  onPointerDown: (event: PointerEvent<HTMLDivElement>) => void;
+  onPointerMove: (event: PointerEvent<HTMLDivElement>) => void;
+  onPointerUp: () => void;
+  onDoubleClick: () => void;
 }) {
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [rotation, setRotation] = useState(0);
-  const [zoom, setZoom] = useState(1);
+  const count = version === 'thirty-one-students' ? 31 : 30;
 
-  const drag = useRef<{
-    active: boolean;
-    pointerId: number | null;
-    startPointerX: number;
-    startPointerY: number;
-    startX: number;
-    startY: number;
-    startRotation: number;
-  }>({
-    active: false,
-    pointerId: null,
-    startPointerX: 0,
-    startPointerY: 0,
-    startX: 0,
-    startY: 0,
-    startRotation: 0,
-  });
-
-  const rotationRef = useRef(0);
-  const positionRef = useRef({ x: 0, y: 0 });
-
-  const setPhotoRotation = (value: number) => {
-    rotationRef.current = value;
-    setRotation(value);
-  };
-
-  const setPhotoPosition = (value: { x: number; y: number }) => {
-    positionRef.current = value;
-    setPosition(value);
-  };
-
-  const normalizeRotation = (value: number) => {
-    let result = value % 360;
-    if (result < 0) result += 360;
-    return result;
-  };
-
-  const handlePointerDown = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    if (event.button !== 0) return;
-
-    event.preventDefault();
-
-    event.currentTarget.setPointerCapture(event.pointerId);
-
-    drag.current = {
-      active: true,
-      pointerId: event.pointerId,
-      startPointerX: event.clientX,
-      startPointerY: event.clientY,
-      startX: positionRef.current.x,
-      startY: positionRef.current.y,
-      startRotation: rotationRef.current,
-    };
-  };
-
-  const handlePointerMove = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    if (
-      !drag.current.active ||
-      drag.current.pointerId !== event.pointerId
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-
-    const dx = event.clientX - drag.current.startPointerX;
-    const dy = event.clientY - drag.current.startPointerY;
-
-    /*
-     * The photograph physically follows the pointer.
-     * It is no longer locked to one side of the investigation area.
-     */
-    setPhotoPosition({
-      x: drag.current.startX + dx,
-      y: drag.current.startY + dy,
-    });
-
-    /*
-     * Horizontal movement produces physical rotation.
-     * This is deliberately slower than the old system so
-     * the player can control the photograph easily.
-     */
-    const nextRotation =
-      drag.current.startRotation + dx * 0.22;
-
-    setPhotoRotation(nextRotation);
-  };
-
-  const finishDrag = (
-    event: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    if (
-      !drag.current.active ||
-      drag.current.pointerId !== event.pointerId
-    ) {
-      return;
-    }
-
-    drag.current.active = false;
-    drag.current.pointerId = null;
-
-    try {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {
-      // Pointer capture may already have been released.
-    }
-
-    const currentRotation = normalizeRotation(
-      rotationRef.current,
-    );
-
-    /*
-     * Easier physical flip:
-     *
-     * 135°–225° = back
-     * otherwise = front
-     *
-     * The photo snaps naturally to whichever side
-     * the player was trying to reach.
-     */
-    if (
-      currentRotation >= 120 &&
-      currentRotation <= 240
-    ) {
-      onTurnedChange(true);
-      setPhotoRotation(180);
-    } else {
-      onTurnedChange(false);
-      setPhotoRotation(0);
-    }
-  };
-
-  const handleWheel = (
-    event: React.WheelEvent<HTMLDivElement>,
-  ) => {
-    event.preventDefault();
-
-    setZoom((current) =>
-      Math.max(
-        0.65,
-        Math.min(
-          2.4,
-          Number(
-            (current - event.deltaY * 0.001).toFixed(2),
-          ),
-        ),
-      ),
-    );
-  };
-
-  /*
-   * Double click is only a natural zoom gesture.
-   * It does not reveal clues or give instructions.
-   */
-  const handleDoubleClick = () => {
-    setZoom((current) =>
-      current >= 1.7
-        ? 1
-        : Math.min(1.7, Number((current + 0.2).toFixed(1))),
-    );
-  };
-
-  /*
-   * These are the eventual real photographic assets.
-   *
-   * All three perspectives intentionally point to the same
-   * physical photograph for now. Perspective-specific image
-   * variants can be introduced later without changing the
-   * interaction system.
-   */
-  const photoSources: Record<PhotoVersion, string> = {
-    "thirty-students":
-      "/assets/section4b/class-photo-base.jpg",
-    "thirty-one-students":
-      "/assets/section4b/class-photo-base.jpg",
-    "empty-chair":
-      "/assets/section4b/class-photo-base.jpg",
-  };
-
-  const photoSource = photoSources[version];
+  const missingIndex =
+    version === 'empty-chair' ? 0 : version === 'thirty-students' ? 30 : -1;
 
   return (
     <div
-      className="absolute left-1/2 top-1/2 z-30"
+      className="absolute left-1/2 top-1/2 z-20 w-[min(520px,72vw)] max-w-[520px] -translate-x-1/2 -translate-y-1/2 cursor-grab select-none touch-none active:cursor-grabbing"
       style={{
-        transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px))`,
+        transform: `translate(-50%, -50%) rotate(${rotation}deg) scale(${zoom})`,
+        transformOrigin: 'center center',
       }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onDoubleClick={onDoubleClick}
     >
-      <div
-        className="relative"
-        style={{
-          transform: `rotate(${rotation}deg) scale(${zoom})`,
-          transformOrigin: "center center",
-          transition: drag.current.active
-            ? "none"
-            : "transform 180ms ease-out",
-          touchAction: "none",
-        }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={finishDrag}
-        onPointerCancel={finishDrag}
-        onWheel={handleWheel}
-        onDoubleClick={handleDoubleClick}
-      >
-        <div
-          className="relative cursor-grab select-none active:cursor-grabbing"
-          style={{
-            width: "min(760px, 76vw)",
-            maxWidth: "760px",
-            minWidth: "420px",
-            aspectRatio: "4 / 3",
-          }}
-        >
-          {!turned ? (
-            <div className="relative h-full w-full overflow-hidden rounded-[2px] bg-[#ddd0b7] p-[3%] shadow-[0_30px_80px_rgba(0,0,0,0.65)]">
-              <div className="relative h-full w-full overflow-hidden bg-black/20">
-                <img
-                  src={photoSource}
-                  alt="Section 4-B class photograph"
-                  draggable={false}
-                  className="h-full w-full object-cover"
-                  onError={(event) => {
-                    /*
-                     * Until the realistic class-photo asset is
-                     * generated, keep the physical photograph
-                     * surface intact rather than showing a broken
-                     * browser image.
-                     */
-                    event.currentTarget.style.display = "none";
-                  }}
+      <div className="relative aspect-[1.42] rotate-[-1deg] bg-[#b7a987] p-[3.5%] shadow-[0_28px_70px_rgba(0,0,0,0.75)]">
+        <div className="absolute inset-[1.4%] border border-black/20" />
+
+        {!turned ? (
+          <div className="relative h-full overflow-hidden bg-[#726a5b]">
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.1),transparent_30%,rgba(0,0,0,0.35)),radial-gradient(circle_at_50%_38%,#968a75,#635e51_75%)]" />
+
+            <div className="absolute left-[4%] top-[4%] text-[6px] font-semibold tracking-[0.25em] text-black/55">
+              SECTION 4-B
+            </div>
+
+            <div className="absolute left-[4%] right-[4%] top-[16%] grid grid-cols-10 gap-[1.2%]">
+              {Array.from({length: count}).map((_, index) => (
+                <StudentPortrait
+                  key={index}
+                  index={index}
+                  name={STUDENT_NAMES[index]}
+                  highlighted={index === missingIndex}
                 />
-
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/12 via-transparent to-black/20" />
-                <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-black/25" />
-
-                <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:radial-gradient(rgba(255,255,255,.8)_0.6px,transparent_0.6px)] [background-size:4px_4px]" />
-              </div>
-
-              <div className="pointer-events-none absolute inset-[1.4%] border border-black/20" />
+              ))}
             </div>
-          ) : (
-            <div className="relative h-full w-full overflow-hidden rounded-[2px] bg-[#d5c5a5] p-[7%] text-[#342d24] shadow-[0_30px_80px_rgba(0,0,0,0.65)]">
-              <div className="absolute inset-[3%] border border-[#514839]/30" />
 
-              <div className="relative flex h-full flex-col justify-between font-serif">
-                <div className="text-[clamp(9px,1vw,13px)] tracking-[0.18em]">
-                  SECTION 4-B — 31 STUDENTS
-                </div>
+            {version === 'empty-chair' && (
+              <div className="absolute bottom-[11%] left-[5%] h-[14%] w-[8%]">
+                <div className="absolute bottom-0 left-1/2 h-[75%] w-[42%] -translate-x-1/2 border-x-2 border-t-2 border-black/45" />
+                <div className="absolute bottom-0 left-[18%] h-[45%] w-1 bg-black/45" />
+                <div className="absolute bottom-0 right-[18%] h-[45%] w-1 bg-black/45" />
+              </div>
+            )}
 
-                <div className="space-y-3 text-[clamp(10px,1.1vw,14px)] leading-relaxed">
-                  <div>
-                    San Isidro National High School
-                  </div>
+            {version === 'thirty-one-students' && (
+              <div className="absolute right-[7%] bottom-[7%] rotate-[-5deg] font-serif text-[7px] text-black/55">
+                M.
+              </div>
+            )}
 
-                  <div>
-                    Senior High — Class Photograph
-                  </div>
+            <div className="absolute bottom-[3%] left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-[5px] tracking-[0.28em] text-black/55">
+              SAN ISIDRO NATIONAL HIGH SCHOOL • 2014
+            </div>
 
-                  <div className="mt-8 border-t border-black/20 pt-4">
-                    The ink has bled into the paper.
-                  </div>
-                </div>
+            <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:radial-gradient(rgba(255,255,255,.35)_0.5px,transparent_0.5px)] [background-size:3px_3px]" />
+          </div>
+        ) : (
+          <div className="relative flex h-full flex-col justify-between overflow-hidden bg-[#b7aa8d] p-[7%] font-serif text-[#302c24]">
+            <div className="text-[8px] tracking-[0.18em]">
+              SECTION 4-B — 31 STUDENTS
+            </div>
 
-                <div className="font-mono text-[clamp(8px,0.8vw,11px)] tracking-[0.2em]">
-                  DO NOT FORGET.
-                </div>
-
-                <div className="absolute bottom-[17%] right-[10%] rotate-[-8deg] text-[clamp(9px,0.9vw,12px)] text-red-900/65">
-                  4-B
-                </div>
+            <div className="space-y-2 text-[10px] leading-relaxed">
+              <div>San Isidro National High School</div>
+              <div>Senior High — Class Photograph</div>
+              <div className="mt-5 border-t border-black/20 pt-3">
+                The ink has bled into the paper.
               </div>
             </div>
-          )}
-        </div>
+
+            <div className="font-mono text-[8px] tracking-[0.2em]">
+              DO NOT FORGET.
+            </div>
+
+            <div className="absolute bottom-[19%] right-[12%] rotate-[-8deg] text-[9px] text-red-900/70">
+              4-B
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -406,10 +216,23 @@ export default function App() {
     useState<PhotoVersion>('thirty-students');
 
   const [turned, setTurned] = useState(false);
+  const [rotation, setRotation] = useState(-7);
+  const [zoom, setZoom] = useState(1);
   const [startedAt] = useState(Date.now());
 
   const [elapsed, setElapsed] = useState(0);
 
+  const drag = useRef<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    startRotation: number;
+  }>({
+    active: false,
+    startX: 0,
+    startY: 0,
+    startRotation: -7,
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -434,18 +257,72 @@ export default function App() {
 
   const photo = getPhotoPerspective(perspective, scene);
 
+  function handlePhotoPointerDown(
+    event: PointerEvent<HTMLDivElement>,
+  ) {
+    event.currentTarget.setPointerCapture(event.pointerId);
 
+    drag.current = {
+      active: true,
+      startX: event.clientX,
+      startY: event.clientY,
+      startRotation: rotation,
+    };
+  }
+
+  function handlePhotoPointerMove(
+    event: PointerEvent<HTMLDivElement>,
+  ) {
+    if (!drag.current.active) return;
+
+    const dx = event.clientX - drag.current.startX;
+    const dy = event.clientY - drag.current.startY;
+
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance > 12) {
+      setRotation(
+        drag.current.startRotation +
+          dx * 0.45 -
+          dy * 0.12,
+      );
+    }
+  }
+
+  function handlePhotoPointerUp() {
+    if (!drag.current.active) return;
+
+    drag.current.active = false;
+
+    const normalized = ((rotation % 360) + 360) % 360;
+
+    if (
+      normalized > 135 &&
+      normalized < 225
+    ) {
+      setTurned(true);
+      setRotation(180);
+    } else if (
+      normalized < 45 ||
+      normalized > 315
+    ) {
+      setTurned(false);
+      setRotation(0);
+    }
+  }
 
   function changePerspective(value: PlayerPerspective) {
     setPerspective(value);
     setTurned(false);
+    setRotation(-7);
+    setZoom(1);
 
-    if (value === "A") {
-      setPhotoVersion("thirty-students");
-    } else if (value === "B") {
-      setPhotoVersion("thirty-one-students");
+    if (value === 'A') {
+      setPhotoVersion('thirty-students');
+    } else if (value === 'B') {
+      setPhotoVersion('thirty-one-students');
     } else {
-      setPhotoVersion("empty-chair");
+      setPhotoVersion('empty-chair');
     }
   }
 
@@ -554,11 +431,15 @@ export default function App() {
             <div className="absolute inset-0 [background-image:repeating-linear-gradient(104deg,transparent_0px,transparent_16px,rgba(210,220,218,.25)_17px,transparent_18px)] [background-size:62px_82px] animate-[rain_0.7s_linear_infinite]" />
           </div>
 
-
           <Photograph
             version={photo.version}
             turned={turned}
-            onTurnedChange={setTurned}
+            rotation={rotation}
+            zoom={zoom}
+            onPointerDown={handlePhotoPointerDown}
+            onPointerMove={handlePhotoPointerMove}
+            onPointerUp={handlePhotoPointerUp}
+            onDoubleClick={() => setZoom((value) => Math.min(1.7, value + 0.15))}
           />
 
           <div className="absolute bottom-5 right-5 z-30 text-right md:right-8">
@@ -584,6 +465,30 @@ export default function App() {
                 </button>
               ),
             )}
+
+            <button
+              type="button"
+              onClick={() =>
+                setZoom((value) =>
+                  Math.min(1.7, Number((value + 0.1).toFixed(1))),
+                )
+              }
+              className="border border-white/10 px-2 py-1 text-[7px] text-white/40"
+            >
+              +
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setZoom((value) =>
+                  Math.max(0.8, Number((value - 0.1).toFixed(1))),
+                )
+              }
+              className="border border-white/10 px-2 py-1 text-[7px] text-white/40"
+            >
+              −
+            </button>
           </div>
         </section>
       </div>
