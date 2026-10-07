@@ -51,124 +51,6 @@ const PERSPECTIVE_LABELS: Record<PlayerPerspective, string> = {
   C: 'PLAYER C',
 };
 
-
-type ClassroomObjectProps = {
-  className?: string;
-  label: string;
-  onInteract: () => void;
-  children: React.ReactNode;
-};
-
-function ClassroomObject({
-  className = '',
-  label,
-  onInteract,
-  children,
-}: ClassroomObjectProps) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onInteract}
-      className={`group absolute cursor-pointer border-0 bg-transparent p-0 text-left outline-none ${className}`}
-    >
-      {children}
-
-      <span className="pointer-events-none absolute inset-0 rounded-sm ring-1 ring-transparent transition-all duration-300 group-hover:ring-white/20 group-focus-visible:ring-white/35" />
-    </button>
-  );
-}
-
-function ClassroomObjects({
-  onDiscover,
-}: {
-  onDiscover: (objectKey: string) => void;
-}) {
-  return (
-    <>
-      <ClassroomObject
-        label="Teacher's desk"
-        onInteract={() => onDiscover('teacher-desk')}
-        className="bottom-[9%] left-[5%] h-[15%] w-[20%] rotate-[-2deg]"
-      >
-        <div className="absolute inset-0 border border-black/70 bg-[#302d27] shadow-2xl">
-          <div className="absolute left-[12%] top-[18%] h-2 w-[70%] bg-black/25" />
-          <div className="absolute left-[19%] top-[42%] h-2 w-[58%] bg-black/20" />
-          <div className="absolute bottom-0 left-[17%] h-[42%] w-3 bg-[#211f1a]" />
-          <div className="absolute bottom-0 right-[17%] h-[42%] w-3 bg-[#211f1a]" />
-        </div>
-      </ClassroomObject>
-
-      <ClassroomObject
-        label="Small filing cabinet"
-        onInteract={() => onDiscover('filing-cabinet')}
-        className="bottom-[10%] right-[7%] h-[18%] w-[10%]"
-      >
-        <div className="absolute inset-0 border border-black/70 bg-[#272620] shadow-2xl">
-          {[18, 45, 72].map((top) => (
-            <div
-              key={top}
-              className="absolute -left-1 h-2 w-4 rounded-sm bg-[#4a463b]"
-              style={{ top: `${top}%` }}
-            />
-          ))}
-        </div>
-      </ClassroomObject>
-
-      <ClassroomObject
-        label="Classroom blackboard"
-        onInteract={() => onDiscover('blackboard')}
-        className="left-[39%] top-[22%] h-[29%] w-[23%]"
-      >
-        <div className="absolute inset-0 border-2 border-black/40 bg-[#30342f] shadow-[inset_0_0_35px_rgba(0,0,0,0.5)]">
-          <div className="absolute left-[7%] top-[9%] h-px w-[62%] rotate-[-3deg] bg-white/15" />
-          <div className="absolute left-[9%] top-[22%] h-px w-[46%] rotate-[2deg] bg-white/10" />
-          <div className="absolute right-[9%] top-[41%] h-px w-[33%] rotate-[-2deg] bg-white/10" />
-        </div>
-      </ClassroomObject>
-
-      <ClassroomObject
-        label="Classroom clock"
-        onInteract={() => onDiscover('clock')}
-        className="left-1/2 top-[10%] h-14 w-14 -translate-x-1/2"
-      >
-        <div className="absolute inset-0 rounded-full border-2 border-[#171918] bg-[#b9b09a] shadow-lg">
-          <div className="absolute left-1/2 top-1/2 h-[36%] w-px origin-bottom -translate-y-full rotate-[25deg] bg-[#29261f]" />
-          <div className="absolute left-1/2 top-1/2 h-[27%] w-px origin-bottom -translate-y-full rotate-[125deg] bg-[#29261f]" />
-          <div className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#29261f]" />
-        </div>
-      </ClassroomObject>
-
-      <ClassroomObject
-        label="Window"
-        onInteract={() => onDiscover('window')}
-        className="left-[6%] top-[19%] h-[42%] w-[25%]"
-      >
-        <div className="absolute inset-0 border-4 border-[#242825] bg-[#101615] shadow-[inset_0_0_25px_rgba(0,0,0,0.8)]">
-          <div className="absolute inset-2 bg-[#253536]">
-            <div className="absolute inset-x-0 top-1/2 h-px bg-white/10" />
-            <div className="absolute inset-y-0 left-1/2 w-px bg-white/10" />
-          </div>
-        </div>
-      </ClassroomObject>
-
-      <ClassroomObject
-        label="Right classroom window"
-        onInteract={() => onDiscover('right-window')}
-        className="right-[8%] top-[20%] h-[39%] w-[21%]"
-      >
-        <div className="absolute inset-0 border-4 border-[#282b27] bg-[#151918] shadow-[inset_0_0_30px_rgba(0,0,0,0.8)]">
-          <div className="absolute inset-2 bg-[#303d3b]">
-            <div className="absolute inset-x-0 top-1/2 h-1 bg-[#1c2524]" />
-            <div className="absolute inset-y-0 left-1/2 w-1 bg-[#1c2524]" />
-          </div>
-        </div>
-      </ClassroomObject>
-    </>
-  );
-}
-
 function StudentPortrait({
   index,
   name,
@@ -408,11 +290,11 @@ function Photograph({
    */
   const photoSources: Record<PhotoVersion, string> = {
     "thirty-students":
-      "/assets/section4b/class-photo-master.jpg",
+      "/assets/section4b/class-photo-base.jpg",
     "thirty-one-students":
-      "/assets/section4b/class-photo-master.jpg",
+      "/assets/section4b/class-photo-base.jpg",
     "empty-chair":
-      "/assets/section4b/class-photo-master.jpg",
+      "/assets/section4b/class-photo-base.jpg",
   };
 
   const photoSource = photoSources[version];
@@ -525,7 +407,6 @@ export default function App() {
 
   const [turned, setTurned] = useState(false);
   const [startedAt] = useState(Date.now());
-  const [discoveredObjects, setDiscoveredObjects] = useState<string[]>([]);
 
   const [elapsed, setElapsed] = useState(0);
 
@@ -554,14 +435,6 @@ export default function App() {
   const photo = getPhotoPerspective(perspective, scene);
 
 
-
-  function handleObjectDiscovery(objectKey: string) {
-    setDiscoveredObjects((current) =>
-      current.includes(objectKey)
-        ? current
-        : [...current, objectKey],
-    );
-  }
 
   function changePerspective(value: PlayerPerspective) {
     setPerspective(value);
@@ -682,21 +555,11 @@ export default function App() {
           </div>
 
 
-          <ClassroomObjects onDiscover={handleObjectDiscovery} />
-
           <Photograph
             version={photo.version}
             turned={turned}
             onTurnedChange={setTurned}
           />
-
-          <div className="absolute bottom-5 left-5 z-40 max-w-[220px] text-[8px] tracking-[0.12em] text-white/35">
-            {discoveredObjects.length > 0 && (
-              <div>
-                {discoveredObjects.length} object{discoveredObjects.length === 1 ? '' : 's'} examined
-              </div>
-            )}
-          </div>
 
           <div className="absolute bottom-5 right-5 z-30 text-right md:right-8">
             <div className="text-[8px] tracking-[0.28em] text-white/20">
