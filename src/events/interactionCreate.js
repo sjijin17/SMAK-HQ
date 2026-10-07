@@ -1,69 +1,393 @@
 import { logger } from '../utils/logger.js';
-import { formatUserErrorMessage } from '../utils/errors.js';
 
-export const name = 'interactionCreate';
-export const once = false;
+export default {
+  name: 'interactionCreate',
 
-/**
- * Handles incoming interactions (Slash Commands, Buttons, Select Menus, Modals).
- * @param {import('discord.js').BaseInteraction} interaction
- */
-export async function execute(interaction) {
-  // Handle Slash Commands (ChatInputCommand)
-  if (interaction.isChatInputCommand()) {
+  async execute(interaction) {
+    if (interaction.isButton()) {
+      const customId = interaction.customId;
+
+      // ==========================================================================
+      // ESCAPE ROOM SESSION BUTTONS
+      // ==========================================================================
+
+      if (customId.startsWith('escape-session:')) {
+        try {
+          const { handleEscapeSessionButton } = await import(
+            '../commands/escape/escape-home.js'
+          );
+
+          await handleEscapeSessionButton(interaction);
+        } catch (error) {
+          logger.error(
+            `Error handling Escape Room session button ${interaction.customId}:`,
+            error
+          );
+
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+              content:
+                '❌ Something went wrong while processing the Escape Room action.',
+              flags: 64,
+            }).catch(() => {});
+          }
+        }
+
+        return;
+      }
+
+      // ==========================================================================
+      // ESCAPE ROOM HOMEPAGE BUTTONS
+      // ==========================================================================
+
+      if (customId.startsWith('escape-home:')) {
+        const [, action] = customId.split(':');
+
+        try {
+          if (action === 'play') {
+            const { handleEscapePlay } = await import(
+              '../commands/escape/escape-home.js'
+            );
+
+            await handleEscapePlay(interaction);
+            return;
+          }
+
+          if (action === 'history') {
+            await interaction.reply({
+              content:
+                '📜 **GAME HISTORY**\n\nGame history is being connected to the Escape Room session records.',
+              flags: 64,
+            });
+            return;
+          }
+
+          if (action === 'leaderboard') {
+            await interaction.reply({
+              content:
+                '🏆 **LEADERBOARD**\n\nThe Escape Room leaderboard will use completed session results.',
+              flags: 64,
+            });
+            return;
+          }
+
+          if (action === 'stats') {
+            await interaction.reply({
+              content:
+                '📊 **MY STATS**\n\nYour Escape Room statistics will appear here once completed-session tracking is connected.',
+              flags: 64,
+            });
+            return;
+          }
+
+          if (action === 'monitor') {
+            if (!interaction.memberPermissions?.has('Administrator')) {
+              await interaction.reply({
+                content:
+                  '❌ Only server administrators can access the Escape Room monitor.',
+                flags: 64,
+              });
+              return;
+            }
+
+            await interaction.reply({
+              content:
+                '⚙️ **ADMIN MONITOR**\n\nThe live session monitor and player POV are being connected.',
+              flags: 64,
+            });
+            return;
+          }
+
+          await interaction.reply({
+            content: '❌ Unknown Escape Room action.',
+            flags: 64,
+          });
+        } catch (error) {
+          logger.error(
+            `Error handling Escape Room button ${interaction.customId}:`,
+            error
+          );
+
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+              content:
+                '❌ Something went wrong while opening the Escape Room menu.',
+              flags: 64,
+            }).catch(() => {});
+          }
+        }
+
+        return;
+      }
+
+      // Return to Arcade hub.
+      if (customId.startsWith('arcade-back:')) {
+        const [, ownerId] = customId.split(':');
+
+        if (interaction.user.id !== ownerId) {
+          await interaction.reply({
+            content: '❌ This Arcade menu belongs to another player.',
+            flags: 64,
+          });
+          return;
+        }
+
+        try {
+          await interaction.deferReply({ flags: 64 });
+
+          const { renderArcade } = await import(
+            '../commands/arcade/arcade.js'
+          );
+
+          await renderArcade(interaction, true);
+        } catch (error) {
+          logger.error('Error returning to Arcade:', error);
+        }
+
+        return;
+      }
+
+      // Coinflip choice buttons
+      if (customId.startsWith('arcade-coinflip:')) {
+        const [, choice, ownerId] = customId.split(':');
+
+        if (interaction.user.id !== ownerId) {
+          await interaction.reply({
+            content: '❌ This Coinflip belongs to another player.',
+            flags: 64,
+          });
+          return;
+        }
+
+        try {
+          await interaction.deferReply({ flags: 64 });
+
+          const { playCoinflip } = await import(
+            '../commands/arcade/coinflip.js'
+          );
+
+          await playCoinflip(interaction, choice, true);
+        } catch (error) {
+          logger.error('Error handling Coinflip button:', error);
+        }
+
+        return;
+      }
+
+      // Higher / Lower choice buttons
+      if (customId.startsWith('arcade-higher-lower:')) {
+        const [, choice, ownerId] = customId.split(':');
+
+        if (interaction.user.id !== ownerId) {
+          await interaction.reply({
+            content: '❌ This game belongs to another player.',
+            flags: 64,
+          });
+          return;
+        }
+
+        try {
+          await interaction.deferReply({ flags: 64 });
+
+          const { playHigherLower } = await import(
+            '../commands/arcade/higher-lower.js'
+          );
+
+          await playHigherLower(interaction, choice, true);
+        } catch (error) {
+          logger.error('Error handling Higher or Lower button:', error);
+        }
+
+        return;
+      }
+
+      // Memory buttons are handled by the game's collector.
+      if (customId.startsWith('memory:')) {
+        return;
+      }
+
+      // Arcade hub buttons
+      if (!customId.startsWith('arcade:')) {
+        return;
+      }
+
+      const [, game, ownerId] = customId.split(':');
+
+      if (interaction.user.id !== ownerId) {
+        await interaction.reply({
+          content: '❌ This Arcade menu belongs to another player.',
+          flags: 64,
+        });
+        return;
+      }
+
+      try {
+        if (game === 'coinflip') {
+          const {
+            ActionRowBuilder,
+            ButtonBuilder,
+            ButtonStyle,
+          } = await import('discord.js');
+
+          await interaction.reply({
+            content: '🪙 **Coinflip**\n\nChoose your side:',
+            components: [
+              new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                  .setCustomId(
+                    `arcade-coinflip:heads:${interaction.user.id}`
+                  )
+                  .setLabel('Heads')
+                  .setEmoji('🙂')
+                  .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                  .setCustomId(
+                    `arcade-coinflip:tails:${interaction.user.id}`
+                  )
+                  .setLabel('Tails')
+                  .setEmoji('🔄')
+                  .setStyle(ButtonStyle.Primary)
+              ),
+            ],
+            flags: 64,
+          });
+
+          return;
+        }
+
+        if (game === 'higher-lower') {
+          const {
+            ActionRowBuilder,
+            ButtonBuilder,
+            ButtonStyle,
+          } = await import('discord.js');
+
+          await interaction.reply({
+            content: '📈 **Higher or Lower**\n\nChoose your prediction:',
+            components: [
+              new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                  .setCustomId(
+                    `arcade-higher-lower:higher:${interaction.user.id}`
+                  )
+                  .setLabel('Higher')
+                  .setEmoji('⬆️')
+                  .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                  .setCustomId(
+                    `arcade-higher-lower:lower:${interaction.user.id}`
+                  )
+                  .setLabel('Lower')
+                  .setEmoji('⬇️')
+                  .setStyle(ButtonStyle.Primary)
+              ),
+            ],
+            flags: 64,
+          });
+
+          return;
+        }
+
+        if (game === 'memory') {
+          await interaction.deferReply({ flags: 64 });
+
+          const { startMemory } = await import(
+            '../commands/arcade/memory.js'
+          );
+
+          await startMemory(interaction, true);
+          return;
+        }
+
+        if (game === 'code-breaker') {
+          await interaction.deferReply({ flags: 64 });
+
+          const { startCodeBreaker } = await import(
+            '../commands/arcade/code-breaker.js'
+          );
+
+          await startCodeBreaker(interaction, true);
+          return;
+        }
+
+        await interaction.reply({
+          content: '❌ I could not identify that Arcade game.',
+          flags: 64,
+        });
+      } catch (error) {
+        logger.error(
+          `Error handling Arcade button ${interaction.customId}:`,
+          error
+        );
+
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({
+            content: '❌ Something went wrong while opening that Arcade game.',
+            flags: 64,
+          }).catch(() => {});
+        }
+      }
+
+      return;
+    }
+
+    if (!interaction.isChatInputCommand()) {
+      return;
+    }
+
     const command = interaction.client.commands.get(interaction.commandName);
 
     if (!command) {
-      logger.warn(`Received unknown slash command: /${interaction.commandName}`);
+      logger.warn(`No handler found for /${interaction.commandName}`);
+
       await interaction.reply({
-        content: `❌ Unknown command: \`/${interaction.commandName}\`. It may have been deprecated or moved.`,
-        ephemeral: true,
+        content:
+          `❌ I couldn't find the handler for \`/${interaction.commandName}\`.`,
+        flags: 64,
+      }).catch((error) => {
+        logger.error('Failed to respond to unknown command:', error);
       });
+
       return;
     }
 
     try {
-      logger.debug(
-        `Executing command /${interaction.commandName} by ${interaction.user.tag} in guild ${interaction.guildId || 'DM'}`
+      logger.info(
+        `Executing /${interaction.commandName} for user ${interaction.user.id}`
       );
+
       await command.execute(interaction);
+
+      logger.info(
+        `Successfully executed /${interaction.commandName} for user ${interaction.user.id}`
+      );
     } catch (error) {
-      logger.error(`Error executing /${interaction.commandName}:`, error);
+      logger.error(
+        `Error executing /${interaction.commandName}:`,
+        error
+      );
 
-      const errorMessage = formatUserErrorMessage(error);
+      const errorMessage =
+        '❌ Something went wrong while processing that command. Please try again.';
 
-      // Reply safely depending on whether response was already deferred or sent
       try {
         if (interaction.replied || interaction.deferred) {
-          await interaction.followUp({ content: errorMessage, ephemeral: true });
+          await interaction.followUp({
+            content: errorMessage,
+            flags: 64,
+          });
         } else {
-          await interaction.reply({ content: errorMessage, ephemeral: true });
+          await interaction.reply({
+            content: errorMessage,
+            flags: 64,
+          });
         }
-      } catch (replyError) {
-        logger.error('Failed to send error notification to interaction:', replyError);
+      } catch (responseError) {
+        logger.error(
+          'Failed to send interaction error response:',
+          responseError
+        );
       }
     }
-    return;
-  }
-
-  // Future milestone handler for Buttons (e.g. Escape Room, Arcade, Shop)
-  if (interaction.isButton()) {
-    logger.debug(`Received button interaction: ${interaction.customId} from ${interaction.user.tag}`);
-    // Prepared for future component handlers
-    return;
-  }
-
-  // Future milestone handler for Select Menus (e.g. Shop item selector)
-  if (interaction.isAnySelectMenu()) {
-    logger.debug(`Received select menu interaction: ${interaction.customId} from ${interaction.user.tag}`);
-    return;
-  }
-
-  // Future milestone handler for Modals (e.g. Escape Room riddle input)
-  if (interaction.isModalSubmit()) {
-    logger.debug(`Received modal submission: ${interaction.customId} from ${interaction.user.tag}`);
-    return;
-  }
-}
-
-export default { name, once, execute };
+  },
+};

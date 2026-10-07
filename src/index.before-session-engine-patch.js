@@ -6,8 +6,6 @@ import { Client, Collection, GatewayIntentBits } from 'discord.js';
 
 import { env, validateEnvironment } from './config/environment.js';
 import { logger } from './utils/logger.js';
-import { EscapeRoomService } from './services/escapeRoomService.js';
-import { cleanupEscapeVoiceChannel } from './services/escapeVoiceCleanup.js';
 import { pingDatabase, closeDatabase } from './database/client.js';
 import { registerErrorHandlers } from './events/errorHandlers.js';
 
@@ -183,67 +181,7 @@ const server = http.createServer(async (req, res) => {
 // ============================================================================
 // 5. APPLICATION STARTUP & LIFECYCLE
 // ============================================================================
-// ==========================================================================
-// ESCAPE ROOM SESSION TIMER
-// ==========================================================================
-//
-// Turso is the source of truth for session deadlines.
-// The worker intentionally runs independently of Discord interactions so
-// ACTIVE sessions can expire even when nobody is interacting with the bot.
-
-let escapeSessionTimer = null;
-
 async function startApplication() {
-
-  const checkEscapeSessionExpiry = async () => {
-    try {
-      const expiredSessions =
-        await EscapeRoomService.expireDueSessions();
-
-      if (expiredSessions.length > 0) {
-        logger.info(
-          `Escape session timer expired ${expiredSessions.length} session(s).`
-        );
-
-        for (const session of expiredSessions) {
-          try {
-            const cleanupResult = await cleanupEscapeVoiceChannel({
-              client,
-              session,
-            });
-
-            if (cleanupResult.deleted) {
-              logger.info(
-                `Deleted Escape Room voice channel ${cleanupResult.channelId} for expired session ${session.id}.`
-              );
-            } else {
-              logger.debug(
-                `Escape Room voice cleanup skipped for session ${session.id}: ${cleanupResult.reason}.`
-              );
-            }
-          } catch (cleanupError) {
-            logger.error(
-              `Failed to clean up Escape Room voice channel for session ${session.id}:`,
-              cleanupError
-            );
-          }
-        }
-      }
-    } catch (error) {
-      logger.error(
-        'Escape session expiration check failed:',
-        error
-      );
-    }
-  };
-
-  await checkEscapeSessionExpiry();
-
-  escapeSessionTimer = setInterval(
-    checkEscapeSessionExpiry,
-    5000
-  );
-
   // Start HTTP health server immediately so Cloud Run health checks pass
   const port = env.PORT;
   server.listen(port, '0.0.0.0', () => {
@@ -313,12 +251,6 @@ async function handleShutdown(signal) {
   isShuttingDown = true;
 
   logger.info(`Received ${signal}. Initiating graceful shutdown...`);
-
-  if (escapeSessionTimer) {
-    clearInterval(escapeSessionTimer);
-    escapeSessionTimer = null;
-    logger.info('Escape session timer stopped.');
-  }
 
   // Close HTTP server
   server.close(() => {

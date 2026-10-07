@@ -12,11 +12,21 @@ export const DEFAULTS = {
     MAX_TRANSFER_AMOUNT: 1_000_000,
   },
 
-  // Planned Activity Earning Defaults (Reserved for future milestone)
+  // Activity Earning Defaults
   ACTIVITY_EARNING: {
+    CAMERA_ROLL_REWARD: 100,
+    CAMERA_ROLL_DAILY_LIMIT: 5,
     CAMERA_ROLL_COOLDOWN_HOURS: 24,
+
+    GENERAL_CHAT_REWARD: 5,
+    GENERAL_CHAT_DAILY_LIMIT: 30,
     GENERAL_CHAT_COOLDOWN_SECONDS: 60,
+
+    OPEN_CHAT_REWARD: 5,
+    OPEN_CHAT_DAILY_LIMIT: 30,
     OPEN_CHAT_COOLDOWN_SECONDS: 60,
+
+    TIME_ZONE: 'Asia/Manila',
   },
 
   // Planned Arcade Defaults (Reserved for future milestone)
